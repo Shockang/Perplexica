@@ -20,6 +20,7 @@ class AnthropicProvider(BaseLLM):
         self.base_url = config.get("base_url", "https://api.anthropic.com")
         self.timeout = config.get("timeout", 120)
         self.max_tokens = config.get("max_tokens", 4096)
+        self.verify_ssl = config.get("verify_ssl", True)
 
         if not self.api_key:
             raise ValueError("Anthropic API key is required")
@@ -68,7 +69,11 @@ class AnthropicProvider(BaseLLM):
         url = f"{self.base_url}/v1/messages"
         timeout = aiohttp.ClientTimeout(total=self.timeout)
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        # Create connector with SSL verification control
+        ssl_context = None if self.verify_ssl else False
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             async with session.post(url, json=payload, headers=headers) as response:
                 result = await response.json()
 
@@ -139,7 +144,11 @@ class AnthropicProvider(BaseLLM):
         url = f"{self.base_url}/v1/messages"
         timeout = aiohttp.ClientTimeout(total=self.timeout)
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
+        # Create connector with SSL verification control
+        ssl_context = None if self.verify_ssl else False
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
             async with session.post(url, json=payload, headers=headers) as response:
                 async for line in response.content:
                     line = line.decode('utf-8').strip()

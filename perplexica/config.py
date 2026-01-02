@@ -79,9 +79,14 @@ class Config:
         if openai_key := os.getenv("OPENAI_API_KEY"):
             self.config.setdefault("openai", {})["api_key"] = openai_key
 
-        # Anthropic API key
-        if anthropic_key := os.getenv("ANTHROPIC_API_KEY"):
+        # Anthropic API key (support both ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN)
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")
+        if anthropic_key:
             self.config.setdefault("anthropic", {})["api_key"] = anthropic_key
+
+        # Anthropic base URL
+        if anthropic_base_url := os.getenv("ANTHROPIC_BASE_URL"):
+            self.config.setdefault("anthropic", {})["base_url"] = anthropic_base_url
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value by dot-separated key"""
@@ -137,8 +142,10 @@ class Config:
             },
             "anthropic": {
                 "provider": "anthropic",
-                "api_key": self.get("anthropic.api_key", os.getenv("ANTHROPIC_API_KEY")),
-                "model": model
+                "api_key": self.get("anthropic.api_key", os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")),
+                "base_url": self.get("anthropic.base_url", os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")),
+                "model": model,
+                "verify_ssl": self.get("anthropic.verify_ssl", True)
             }
         }
 

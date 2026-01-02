@@ -1,12 +1,13 @@
 {
   "version": 1,
   "search": {
-    "searxng_url": "http://localhost:4000",
+    "searxng_url": "https://searx.prvcy.com",
     "timeout": 30,
-    "max_results": 10
+    "max_results": 10,
+    "verify_ssl": false
   },
   "models": {
-    "default_chat_model": "ollama:llama3.2",
+    "default_chat_model": "anthropic:claude-3-haiku",
     "default_embedding_model": "ollama:nomic-embed-text",
     "providers": []
   },
@@ -32,6 +33,7 @@
     "api_key": ""
   },
   "anthropic": {
-    "api_key": ""
+    "api_key": "",
+    "verify_ssl": false
   }
 }

@@ -25,9 +25,10 @@ class SearxngConnectionError(SearchError):
 class SearxngSearch:
     """SearXNG search client"""
 
-    def __init__(self, base_url: str, timeout: int = 30):
+    def __init__(self, base_url: str, timeout: int = 30, verify_ssl: bool = True):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.verify_ssl = verify_ssl
 
     async def search(
         self,
@@ -71,9 +72,21 @@ class SearxngSearch:
 
         timeout = aiohttp.ClientTimeout(total=self.timeout)
 
+        # Create connector with SSL verification control
+        import ssl
+        ssl_context = None if self.verify_ssl else False
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+
+        # Add headers to avoid bot detection
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+
         try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(url) as response:
+            async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+                async with session.get(url, headers=headers) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         logger.error(f"SearXNG returned status {response.status}: {error_text}")
