@@ -1,7 +1,7 @@
 {
   "version": 1,
   "search": {
-    "searxng_url": "https://searx.prvcy.com",
+    "searxng_url": "http://localhost:4000",
     "timeout": 30,
     "max_results": 10,
     "verify_ssl": false
