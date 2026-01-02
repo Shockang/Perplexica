@@ -5,6 +5,7 @@ Main entry point for the Python refactored version
 """
 
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
@@ -12,6 +13,93 @@ from perplexica.config import Config
 from perplexica.search_agent import SearchAgent
 from perplexica.models import ModelRegistry
 from perplexica.utils import setup_logging
+
+
+async def run_single_query(args, agent):
+    """Run a single query and display results"""
+    try:
+        result = await agent.search(
+            query=args.query,
+            sources=args.sources,
+            mode=args.mode,
+            model=args.model
+        )
+        print(result["answer"])
+        if result.get("sources"):
+            print("\nSources:")
+            for source in result["sources"]:
+                print(f"  - {source['title']}: {source['url']}")
+        return 0
+    except Exception as e:
+        print(f"Error during search: {e}", file=sys.stderr)
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
+async def run_interactive_mode(args, agent):
+    """Run interactive chat mode"""
+    print("Perplexica - Interactive Mode")
+    print("Type 'quit' or 'exit' to end the session\n")
+    chat_history = []
+
+    while True:
+        try:
+            query = input("You: ").strip()
+            if not query:
+                continue
+            if query.lower() in ["quit", "exit"]:
+                print("Goodbye!")
+                break
+
+            result = await agent.search(
+                query=query,
+                sources=args.sources,
+                mode=args.mode,
+                model=args.model,
+                chat_history=chat_history
+            )
+
+            print(f"\nAssistant: {result['answer']}")
+            if result.get("sources"):
+                print("\nSources:")
+                for source in result["sources"]:
+                    print(f"  - {source['title']}: {source['url']}")
+            print()
+
+            # Add to chat history
+            chat_history.append({"role": "user", "content": query})
+            chat_history.append({"role": "assistant", "content": result["answer"]})
+
+        except KeyboardInterrupt:
+            print("\nGoodbye!")
+            break
+        except Exception as e:
+            print(f"Error: {e}", file=sys.stderr)
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
+
+    return 0
+
+
+async def async_main(args):
+    """Async main function"""
+    # Load configuration
+    config = Config(args.config)
+
+    # Initialize model registry
+    model_registry = ModelRegistry(config)
+
+    # Initialize search agent
+    agent = SearchAgent(config, model_registry)
+
+    # Process query
+    if args.query:
+        return await run_single_query(args, agent)
+    else:
+        return await run_interactive_mode(args, agent)
 
 
 def main():
@@ -61,71 +149,20 @@ def main():
     # Setup logging
     setup_logging(verbose=args.verbose)
 
-    # Load configuration
-    config = Config(args.config)
-
-    # Initialize model registry
-    model_registry = ModelRegistry(config)
-
-    # Initialize search agent
-    agent = SearchAgent(config, model_registry)
-
-    # Process query
-    if args.query:
-        # Single query mode
-        result = agent.search(
-            query=args.query,
-            sources=args.sources,
-            mode=args.mode,
-            model=args.model
-        )
-        print(result["answer"])
-        if result.get("sources"):
-            print("\nSources:")
-            for source in result["sources"]:
-                print(f"  - {source['title']}: {source['url']}")
-    else:
-        # Interactive mode
-        print("Perplexica - Interactive Mode")
-        print("Type 'quit' or 'exit' to end the session\n")
-        chat_history = []
-
-        while True:
-            try:
-                query = input("You: ").strip()
-                if not query:
-                    continue
-                if query.lower() in ["quit", "exit"]:
-                    print("Goodbye!")
-                    break
-
-                result = agent.search(
-                    query=query,
-                    sources=args.sources,
-                    mode=args.mode,
-                    model=args.model,
-                    chat_history=chat_history
-                )
-
-                print(f"\nAssistant: {result['answer']}")
-                if result.get("sources"):
-                    print("\nSources:")
-                    for source in result["sources"]:
-                        print(f"  - {source['title']}: {source['url']}")
-                print()
-
-                # Add to chat history
-                chat_history.append({"role": "user", "content": query})
-                chat_history.append({"role": "assistant", "content": result["answer"]})
-
-            except KeyboardInterrupt:
-                print("\nGoodbye!")
-                break
-            except Exception as e:
-                print(f"Error: {e}", file=sys.stderr)
-
-    return 0
+    # Run async main
+    try:
+        exit_code = asyncio.run(async_main(args))
+        sys.exit(exit_code)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user")
+        sys.exit(130)
+    except Exception as e:
+        print(f"Fatal error: {e}", file=sys.stderr)
+        if args.verbose:
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
