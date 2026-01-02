@@ -147,3 +147,55 @@ class Config:
     def get_mode_config(self, mode: str) -> Dict[str, Any]:
         """Get configuration for optimization mode"""
         return self.get(f"optimization.{mode}", self.get("optimization.balanced"))
+
+    def validate(self) -> tuple[bool, List[str]]:
+        """
+        Validate configuration
+
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        errors = []
+
+        # Check required top-level keys
+        required_keys = ["search", "models", "optimization"]
+        for key in required_keys:
+            if key not in self.config:
+                errors.append(f"Missing required key: {key}")
+
+        # Validate search configuration
+        if "search" in self.config:
+            if not self.config["search"].get("searxng_url"):
+                errors.append("search.searxng_url is required")
+
+        # Validate models configuration
+        if "models" in self.config:
+            if not self.config["models"].get("default_chat_model"):
+                errors.append("models.default_chat_model is required")
+
+        # Validate optimization modes
+        if "optimization" in self.config:
+            for mode in ["speed", "balanced", "quality"]:
+                if mode in self.config["optimization"]:
+                    mode_config = self.config["optimization"][mode]
+                    if not isinstance(mode_config.get("max_iterations"), int):
+                        errors.append(f"optimization.{mode}.max_iterations must be an integer")
+                    if not isinstance(mode_config.get("max_results"), int):
+                        errors.append(f"optimization.{mode}.max_results must be an integer")
+
+        # Validate model provider configuration
+        default_model = self.default_chat_model
+        if ":" in default_model:
+            provider, _ = default_model.split(":", 1)
+
+            if provider == "openai":
+                api_key = self.get("openai.api_key", os.getenv("OPENAI_API_KEY"))
+                if not api_key:
+                    errors.append("OpenAI provider requires OPENAI_API_KEY in config or environment")
+
+            elif provider == "anthropic":
+                api_key = self.get("anthropic.api_key", os.getenv("ANTHROPIC_API_KEY"))
+                if not api_key:
+                    errors.append("Anthropic provider requires ANTHROPIC_API_KEY in config or environment")
+
+        return len(errors) == 0, errors
