@@ -4,12 +4,16 @@ Search Agent - Main orchestration for search and response generation
 
 import asyncio
 import json
+import logging
 from typing import Dict, List, Any, Optional
 
-from .search import SearxngSearch
+from .search import SearxngSearch, SearchError, SearxngConnectionError
 from .classifier import Classifier
 from .researcher import Researcher
 from .utils import format_chat_history
+
+
+logger = logging.getLogger(__name__)
 
 
 class SearchAgent:
@@ -55,53 +59,101 @@ class SearchAgent:
             "You are a helpful AI assistant that provides accurate, well-sourced answers."
         )
 
-        # Get LLM
-        llm = self.model_registry.get_llm(model)
+        try:
+            # Get LLM
+            llm = self.model_registry.get_llm(model)
 
-        # Step 1: Classify the query
-        classification = await self.classifier.classify(
-            query=query,
-            chat_history=chat_history,
-            enabled_sources=sources
-        )
+            # Step 1: Classify the query
+            try:
+                classification = await self.classifier.classify(
+                    query=query,
+                    chat_history=chat_history,
+                    enabled_sources=sources
+                )
+            except Exception as e:
+                logger.error(f"Classification failed: {e}")
+                # Use default classification
+                classification = {
+                    "skip_search": False,
+                    "standalone_query": query,
+                    "sources": sources,
+                    "query_type": "factual"
+                }
 
-        # Step 2: Research (if needed)
-        search_results = []
-        if not classification.get("skip_search", False):
-            search_results = await self.researcher.research(
-                query=query,
-                standalone_query=classification.get("standalone_query", query),
-                classification=classification,
-                sources=sources,
-                mode=mode,
-                llm=llm,
-                chat_history=chat_history
-            )
+            # Step 2: Research (if needed)
+            search_results = []
+            if not classification.get("skip_search", False):
+                try:
+                    search_results = await self.researcher.research(
+                        query=query,
+                        standalone_query=classification.get("standalone_query", query),
+                        classification=classification,
+                        sources=sources,
+                        mode=mode,
+                        llm=llm,
+                        chat_history=chat_history
+                    )
+                except SearxngConnectionError as e:
+                    logger.error(f"Search connection failed: {e}")
+                    # Return helpful error message
+                    return {
+                        "answer": f"I'm sorry, but I couldn't connect to the search service. "
+                                 f"Error: {str(e)}\n\n"
+                                 f"Please make sure SearXNG is running at {self.config.searxng_url}",
+                        "sources": [],
+                        "classification": classification,
+                        "error": "search_connection_failed"
+                    }
+                except SearchError as e:
+                    logger.error(f"Search failed: {e}")
+                    # Continue with empty results
+                    search_results = []
 
-        # Step 3: Generate final answer
-        answer = await self._generate_answer(
-            query=query,
-            search_results=search_results,
-            classification=classification,
-            chat_history=chat_history,
-            system_instructions=system_instructions,
-            llm=llm
-        )
+            # Step 3: Generate final answer
+            try:
+                answer = await self._generate_answer(
+                    query=query,
+                    search_results=search_results,
+                    classification=classification,
+                    chat_history=chat_history,
+                    system_instructions=system_instructions,
+                    llm=llm
+                )
+            except Exception as e:
+                logger.error(f"Answer generation failed: {e}")
+                # Provide fallback answer
+                if search_results:
+                    answer = "I found some search results, but encountered an error generating a comprehensive answer. Here are the results:\n\n"
+                    for i, result in enumerate(search_results[:5], 1):
+                        answer += f"{i}. {result.get('title', '')}\n"
+                        answer += f"   {result.get('url', '')}\n"
+                        answer += f"   {result.get('content', '')[:200]}...\n\n"
+                else:
+                    answer = f"I'm sorry, but I encountered an error while processing your request. Error: {str(e)}"
 
-        # Extract sources from search results
-        sources_list = []
-        for result in search_results:
-            sources_list.append({
-                "title": result.get("title", ""),
-                "url": result.get("url", ""),
-                "snippet": result.get("content", "")[:200] + "..."
-            })
+            # Extract sources from search results
+            sources_list = []
+            for result in search_results:
+                sources_list.append({
+                    "title": result.get("title", ""),
+                    "url": result.get("url", ""),
+                    "snippet": result.get("content", "")[:200] + "..."
+                })
 
-        return {
-            "answer": answer,
-            "sources": sources_list,
-            "classification": classification
-        }
+            return {
+                "answer": answer,
+                "sources": sources_list,
+                "classification": classification
+            }
+
+        except Exception as e:
+            logger.error(f"Unexpected error in search: {e}")
+            return {
+                "answer": f"I'm sorry, but an unexpected error occurred: {str(e)}",
+                "sources": [],
+                "classification": {},
+                "error": "unexpected_error"
+            }
 
     async def _generate_answer(
         self,

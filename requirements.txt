@@ -1,2 +1,8 @@
-aiohttp>=3.9.0
+# HTTP client
+aiohttp>=3.10.0
+
+# Environment variables
 python-dotenv>=1.0.0
+
+# Optional: For better DNS resolution (fixes aiodns issues)
+# aiodns>=3.0.0  # May have compatibility issues, omit if not needed

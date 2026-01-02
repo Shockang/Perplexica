@@ -4,8 +4,22 @@ Search integration with SearXNG
 
 import asyncio
 import aiohttp
+import logging
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlencode
+
+
+logger = logging.getLogger(__name__)
+
+
+class SearchError(Exception):
+    """Base exception for search errors"""
+    pass
+
+
+class SearxngConnectionError(SearchError):
+    """Exception raised when connection to SearXNG fails"""
+    pass
 
 
 class SearxngSearch:
@@ -23,7 +37,7 @@ class SearxngSearch:
         language: str = "en",
         page: int = 1,
         max_results: int = 10
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Perform a search query
 
@@ -36,7 +50,10 @@ class SearxngSearch:
             max_results: Maximum number of results to return
 
         Returns:
-            List of search results with title, url, content, etc.
+            Dictionary with results and suggestions
+
+        Raises:
+            SearxngConnectionError: If connection to SearXNG fails
         """
         params = {
             "q": query,
@@ -54,39 +71,72 @@ class SearxngSearch:
 
         timeout = aiohttp.ClientTimeout(total=self.timeout)
 
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as response:
-                data = await response.json()
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"SearXNG returned status {response.status}: {error_text}")
+                        raise SearxngConnectionError(
+                            f"SearXNG returned status {response.status}: {error_text}"
+                        )
 
-                results = data.get("results", [])
-                suggestions = data.get("suggestions", [])
+                    try:
+                        data = await response.json()
+                    except aiohttp.ContentTypeError:
+                        error_text = await response.text()
+                        logger.error(f"SearXNG returned non-JSON response: {error_text}")
+                        raise SearxngConnectionError(
+                            f"SearXNG returned non-JSON response: {error_text}"
+                        )
 
-                # Limit results
-                results = results[:max_results]
+                    results = data.get("results", [])
+                    suggestions = data.get("suggestions", [])
 
-                # Standardize result format
-                standardized_results = []
-                for result in results:
-                    standardized_results.append({
-                        "title": result.get("title", ""),
-                        "url": result.get("url", ""),
-                        "content": result.get("content", ""),
-                        "img_src": result.get("img_src", ""),
-                        "thumbnail": result.get("thumbnail_src", ""),
-                        "author": result.get("author", ""),
-                        "engine": result.get("engine", ""),
-                    })
+                    # Limit results
+                    results = results[:max_results]
 
-                return {
-                    "results": standardized_results,
-                    "suggestions": suggestions
-                }
+                    # Standardize result format
+                    standardized_results = []
+                    for result in results:
+                        standardized_results.append({
+                            "title": result.get("title", ""),
+                            "url": result.get("url", ""),
+                            "content": result.get("content", ""),
+                            "img_src": result.get("img_src", ""),
+                            "thumbnail": result.get("thumbnail_src", ""),
+                            "author": result.get("author", ""),
+                            "engine": result.get("engine", ""),
+                        })
+
+                    return {
+                        "results": standardized_results,
+                        "suggestions": suggestions
+                    }
+
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"Failed to connect to SearXNG at {self.base_url}: {e}")
+            raise SearxngConnectionError(
+                f"Failed to connect to SearXNG at {self.base_url}. "
+                f"Make sure SearXNG is running and accessible."
+            ) from e
+        except asyncio.TimeoutError as e:
+            logger.error(f"Timeout while searching SearXNG: {e}")
+            raise SearxngConnectionError(
+                f"Search request timed out after {self.timeout} seconds"
+            ) from e
+        except SearxngConnectionError:
+            # Re-raise SearXNG connection errors as-is
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during search: {e}")
+            raise SearchError(f"Unexpected error during search: {e}") from e
 
     async def academic_search(
         self,
         query: str,
         max_results: int = 10
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """Perform academic search"""
         return await self.search(
             query=query,
@@ -98,7 +148,7 @@ class SearxngSearch:
         self,
         query: str,
         max_results: int = 10
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """Perform social search"""
         return await self.search(
             query=query,
