@@ -25,7 +25,8 @@ class SearchAgent:
         self.model_registry = model_registry
         self.search_client = SearxngSearch(
             base_url=config.searxng_url,
-            timeout=config.get("search.timeout", 30)
+            timeout=config.get("search.timeout", 30),
+            verify_ssl=config.get("search.verify_ssl", True)
         )
         self.classifier = Classifier(config, model_registry)
         self.researcher = Researcher(config, model_registry, self.search_client)
