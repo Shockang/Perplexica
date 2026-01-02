@@ -6,7 +6,31 @@ Refactor the entire Perplexica project into Python scripts, removing code and do
 
 ## Recent Progress (Current Iteration - 2026-01-02)
 
-### Completed This Session
+### Completed This Session (Morning)
+
+1. **Created comprehensive runtime testing suite** ✓
+   - Added `test_runtime.py` with integration tests for all components
+   - Tests: config loading, SearXNG connection, model registry, classifier, search integration
+   - Tests different modes (speed/balanced) and sources (web/academic)
+   - Provides helpful error messages and troubleshooting tips
+
+2. **Created detailed setup guide** ✓
+   - Added `SETUP_GUIDE.md` with step-by-step instructions
+   - Covers: installation, service setup, configuration, usage, troubleshooting
+   - Includes examples for Docker + Ollama (local) and cloud services
+   - Provides performance tips and architecture overview
+
+3. **Created example configuration** ✓
+   - Added `config.example.json` with all settings documented
+   - Includes SearXNG, models, optimization modes, and provider configs
+   - Easy to customize and copy to config.json
+
+4. **Updated README_PYTHON.md** ✓
+   - Quick start guide with minimal steps to get running
+   - Links to detailed SETUP_GUIDE.md
+   - Clear project status and feature list
+
+### Completed This Session (Previous - Prompts & Dependencies)
 
 1. **Fixed dependency issues** ✓
    - Removed aiodns and pycares packages (compatibility issues with aiohttp)
@@ -206,21 +230,49 @@ All three major components now use official prompts from the TypeScript codebase
 
 ## Next Steps Recommendation
 
-**Immediate next iteration should:**
+**CURRENT ITERATION SHOULD:**
 
-1. Set up a real SearXNG instance (or use a public one)
-2. Set up a real LLM (Ollama is easiest for local testing)
-3. Run `python perplexica.py "What is the latest news about AI?"` and verify it works
-4. Test different modes: `--mode speed`, `--mode balanced`, `--mode quality`
-5. Test different sources: `--sources academic`, `--sources social`
-6. Verify citations are included in answers
-7. Test error handling (e.g., stop SearXNG and verify graceful error)
+1. **Run the test suite** to verify the current implementation
+   ```bash
+   python test_setup.py      # Basic structure tests
+   python test_runtime.py    # Integration tests (requires services)
+   ```
+
+2. **Set up services** if not already running:
+   ```bash
+   # SearXNG
+   docker run -d --name searxng -p 4000:8080 searxng/searxng:latest
+
+   # Ollama
+   ollama serve
+   ollama pull llama3.2
+   ```
+
+3. **Test basic functionality**:
+   ```bash
+   python perplexica.py "What is the capital of France?"
+   ```
+
+4. **Verify all core features work**:
+   - [ ] Single query search works
+   - [ ] Interactive mode works
+   - [ ] Different modes produce different results (speed/balanced/quality)
+   - [ ] Different sources work (web/academic/social)
+   - [ ] Citations are included in answers
+   - [ ] Error handling works (e.g., stop SearXNG and verify graceful error)
+
+5. **Document any issues found** in SHARED_TASK_NOTES.md for next iteration
+
+**If runtime testing reveals bugs, fix them immediately.** This is critical - we need the basic CLI to work reliably before moving on to enhancements.
+
+**Once basic testing passes**, then consider:
+- Adding database persistence (medium priority)
+- Implementing streaming responses (medium priority)
+- Adding more providers (low priority)
 
 **Don't worry about yet:**
-- Database persistence
 - File uploads
 - Web interface
-- More providers
 - Widgets and extras
 
 Focus on getting the basic CLI search working reliably with real services first.
@@ -230,7 +282,10 @@ Focus on getting the basic CLI search working reliably with real services first.
 ```
 perplexica.py                 # Main CLI entry point
 test_setup.py               # Basic test suite
+test_runtime.py             # Integration tests (NEW)
 requirements.txt            # Dependencies (FIXED: removed aiodns)
+SETUP_GUIDE.md              # Detailed setup guide (NEW)
+config.example.json         # Example configuration (NEW)
 
 perplexica/
 ├── __init__.py
