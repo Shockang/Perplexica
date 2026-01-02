@@ -11,6 +11,7 @@ from .search import SearxngSearch, SearchError, SearxngConnectionError
 from .classifier import Classifier
 from .researcher import Researcher
 from .utils import format_chat_history
+from .prompts.writer import get_writer_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,8 @@ class SearchAgent:
                     classification=classification,
                     chat_history=chat_history,
                     system_instructions=system_instructions,
-                    llm=llm
+                    llm=llm,
+                    mode=mode
                 )
             except Exception as e:
                 logger.error(f"Answer generation failed: {e}")
@@ -162,7 +164,8 @@ class SearchAgent:
         classification: Dict[str, Any],
         chat_history: List[Dict[str, str]],
         system_instructions: str,
-        llm
+        llm,
+        mode: str = "balanced"
     ) -> str:
         """Generate the final answer based on search results"""
 
@@ -179,26 +182,16 @@ class SearchAgent:
         else:
             search_context = "No search results available."
 
-        # Build prompt
-        prompt = f"""{system_instructions}
-
-You are given a user query and search results. Your task is to answer the query using information from the search results. Cite your sources using [index] notation where index corresponds to the search result number.
-
-<search_results>
-{search_context}
-</search_results>
-
-<chat_history>
-{format_chat_history(chat_history[-5:])}
-</chat_history>
-
-User Query: {query}
-
-Provide a comprehensive answer based on the search results. Cite sources using [index] notation."""
+        # Use the official writer prompt
+        writer_prompt = get_writer_prompt(
+            context=search_context,
+            system_instructions=system_instructions,
+            mode=mode
+        )
 
         # Generate response
         messages = [
-            {"role": "system", "content": prompt},
+            {"role": "system", "content": writer_prompt},
         ]
 
         # Add recent chat history

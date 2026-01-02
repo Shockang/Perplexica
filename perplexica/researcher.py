@@ -4,10 +4,16 @@ Researcher - Performs multi-step research using web search
 
 import asyncio
 import json
+import logging
 from typing import Dict, List, Any
+from datetime import datetime
 
 from .search import SearxngSearch
 from .models.base import BaseLLM
+from .prompts.researcher import get_researcher_prompt
+
+
+logger = logging.getLogger(__name__)
 
 
 class Researcher:
@@ -116,30 +122,37 @@ class Researcher:
         seen_urls = {r.get("url", "") for r in initial_results}
 
         for iteration in range(max_iterations):
-            # Build prompt for deciding next search
+            # Build context from current results
             context = self._format_results_for_context(all_results[:10])
 
-            prompt = f"""You are a research assistant. Given the current research results, determine if more information is needed.
+            # Build action description for the prompt
+            action_desc = self._get_action_description()
 
-Research Query: {query}
+            # Get the appropriate researcher prompt
+            today = datetime.now().strftime("%B %d, %Y")
 
-Current Findings:
-{context}
+            # Build a simplified prompt that works with our architecture
+            prompt = f"""You are a research assistant conducting deep research on: {query}
 
+Today's date: {today}
 Iteration {iteration + 1}/{max_iterations}
 
-Decide:
-1. Do we have enough information to answer the query comprehensively?
-2. If not, what specific follow-up searches would help?
+Current research findings:
+{context}
+
+Determine if more information is needed:
+1. Do we have enough information to comprehensively answer the query?
+2. If not, what specific follow-up searches would provide missing information?
 
 Respond in JSON format:
 {{
     "done": false,
     "follow_up_query": "specific search query if needed",
-    "reasoning": "why this follow-up is needed"
+    "reasoning": "why this follow-up is needed",
+    "coverage_assessment": "what aspects are covered vs missing"
 }}
 
-If information is sufficient, set done to true."""
+Set done to true only when you have comprehensive, multi-angle coverage."""
 
             messages = [
                 {"role": "system", "content": "You are a research assistant. Respond only in valid JSON."},
@@ -160,27 +173,43 @@ If information is sufficient, set done to true."""
                 decision = json.loads(content)
 
                 if decision.get("done", False):
+                    logger.info(f"Research complete after {iteration + 1} iterations")
                     break
 
                 follow_up_query = decision.get("follow_up_query", "")
                 if not follow_up_query:
+                    logger.info(f"No follow-up query provided, ending research")
                     break
+
+                logger.info(f"Follow-up search: {follow_up_query}")
 
                 # Perform follow-up search
                 search_result = await self.search_client.search(follow_up_query, max_results=5)
 
                 # Add new results
-                for result in search_result.get("results", []):
+                new_results = search_result.get("results", [])
+                for result in new_results:
                     url = result.get("url", "")
                     if url and url not in seen_urls:
                         seen_urls.add(url)
                         all_results.append(result)
 
+                logger.info(f"Added {len(new_results)} new results (total: {len(all_results)})")
+
             except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"Iteration {iteration + 1} failed: {e}, continuing with available results")
                 # If iteration fails, continue with what we have
                 break
 
         return all_results
+
+    def _get_action_description(self) -> str:
+        """Generate description of available search actions"""
+        return """
+- web_search: Search the web for general information
+- academic_search: Search academic databases and scholarly articles
+- social_search: Search discussion forums and community platforms
+"""
 
     def _format_results_for_context(self, results: List[Dict[str, Any]]) -> str:
         """Format search results for LLM context"""
