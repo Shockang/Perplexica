@@ -89,8 +89,25 @@ async def async_main(args):
     # Load configuration
     config = Config(args.config)
 
+    # Validate configuration
+    is_valid, errors = config.validate()
+    if not is_valid:
+        print("Configuration validation failed:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        print("\nPlease fix these errors in config.json or config.example.json", file=sys.stderr)
+        print("Run 'python check_health.py' for detailed diagnostics", file=sys.stderr)
+        sys.exit(1)
+
     # Initialize model registry
-    model_registry = ModelRegistry(config)
+    try:
+        model_registry = ModelRegistry(config)
+    except Exception as e:
+        print(f"Failed to initialize model registry: {e}", file=sys.stderr)
+        print("\nTips:")
+        print("  - Run 'python check_health.py' to diagnose issues")
+        print("  - Check that your LLM provider is configured correctly")
+        sys.exit(1)
 
     # Initialize search agent
     agent = SearchAgent(config, model_registry)
