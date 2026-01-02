@@ -103,7 +103,8 @@ async def test_searxng_connection(runner: TestRunner):
         )
 
         # Try a simple search
-        results = await search.search("test query", category="general")
+        result = await search.search("test query")
+        results = result.get("results", [])
 
         if results:
             runner.print_result(True, f"Connected to SearXNG, got {len(results)} results")
