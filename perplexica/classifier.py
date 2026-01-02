@@ -3,9 +3,14 @@ Query classifier for determining search strategy
 """
 
 import json
+import logging
 from typing import Dict, List, Any
 
 from .models.base import BaseLLM
+from .prompts.classifier import CLASSIFIER_PROMPT
+
+
+logger = logging.getLogger(__name__)
 
 
 class Classifier:
@@ -34,13 +39,8 @@ class Classifier:
         """
         llm = self.model_registry.get_llm()
 
-        # Build classification prompt
-        prompt = f"""You are a query classifier. Analyze the user's query and determine:
-1. Whether web search is needed (some queries can be answered from general knowledge)
-2. What search sources to use (web, academic, social)
-3. Generate a standalone version of the query if it references previous context
-
-Available sources: {', '.join(enabled_sources)}
+        # Build classification prompt using the official prompt template
+        prompt = f"""{CLASSIFIER_PROMPT}
 
 <chat_history>
 {self._format_history(chat_history[-3:])}
@@ -48,20 +48,13 @@ Available sources: {', '.join(enabled_sources)}
 
 User Query: {query}
 
-Respond in JSON format:
-{{
-    "skip_search": false,
-    "standalone_query": "rewritten query that stands alone",
-    "reasoning": "brief explanation",
-    "sources": ["web", "academic"],
-    "query_type": "factual|conversational|computational|navigation"
-}}
+Available sources: {', '.join(enabled_sources)}
 
-Rules:
-- Set skip_search to true only for simple greetings, basic math, or common knowledge
-- For queries referencing previous messages (e.g., "it", "that"), rewrite as standalone
-- Use academic sources for research, scientific, or scholarly topics
-- Use web sources for general information"""
+Note: For the "sources" field in classification, map:
+- "web" search sources to general web search
+- "academic" to academic search
+- "discussion" to social/discussion search
+"""
 
         messages = [
             {"role": "system", "content": "You are a helpful assistant that responds only in valid JSON format."},
@@ -79,24 +72,38 @@ Rules:
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0].strip()
 
-            classification = json.loads(content)
+            result = json.loads(content)
 
-            # Ensure required fields
-            if "skip_search" not in classification:
-                classification["skip_search"] = False
-            if "standalone_query" not in classification:
-                classification["standalone_query"] = query
-            if "sources" not in classification:
-                classification["sources"] = enabled_sources
+            # Map from the official classifier format to our internal format
+            classification_data = result.get("classification", {})
 
-            # Filter sources to only enabled ones
-            classification["sources"] = [
-                s for s in classification["sources"] if s in enabled_sources
-            ]
+            # Map search sources based on classification
+            sources = []
+            if classification_data.get("academicSearch", False):
+                sources.append("academic")
+            if classification_data.get("discussionSearch", False):
+                sources.append("social")
+            # Default to web if no specific sources selected
+            if not sources and not classification_data.get("skipSearch", False):
+                sources.append("web")
+
+            # Filter to only enabled sources
+            sources = [s for s in sources if s in enabled_sources]
+
+            # Build our internal classification format
+            classification = {
+                "skip_search": classification_data.get("skipSearch", False),
+                "standalone_query": result.get("standaloneFollowUp", query),
+                "sources": sources if sources else enabled_sources,
+                "reasoning": "Query classified using official classifier",
+                # Store original classification for reference
+                "original_classification": classification_data
+            }
 
             return classification
 
         except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"Classification parsing failed: {e}, using fallback")
             # Fallback classification
             return {
                 "skip_search": False,

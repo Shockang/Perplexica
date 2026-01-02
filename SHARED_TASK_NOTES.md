@@ -4,35 +4,41 @@
 
 Refactor the entire Perplexica project into Python scripts, removing code and documentation unrelated to core functionality.
 
-## Recent Progress (Current Iteration)
+## Recent Progress (Current Iteration - 2026-01-02)
 
 ### Completed This Session
 
-1. **Fixed async/sync boundary** in `perplexica.py`
-   - Converted main() to use `asyncio.run()` properly
-   - Separated sync and async code paths
-   - Added proper error handling in CLI layer
+1. **Fixed dependency issues** ✓
+   - Removed aiodns and pycares packages (compatibility issues with aiohttp)
+   - Updated requirements.txt with clear warnings about incompatible packages
+   - All modules now import successfully without errors
 
-2. **Added comprehensive error handling**
-   - Search errors: `SearchError`, `SearxngConnectionError` exceptions
-   - Connection failures, timeouts, non-JSON responses
-   - Graceful degradation with helpful error messages
-   - Fallback responses when LLM fails
+2. **Integrated official prompts** ✓
+   - **Classifier**: Integrated `CLASSIFIER_PROMPT` into classifier.py
+     - Uses official query classification prompt from TypeScript codebase
+     - Maps classification output to internal format (skipSearch, academicSearch, etc.)
+     - Improved error handling with fallback classification
 
-3. **Added original prompts from TypeScript code**
-   - `perplexica/prompts/classifier.py`: Query classification prompt
-   - `perplexica/prompts/researcher.py`: Speed/balanced/quality research prompts
-   - `perplexica/prompts/writer.py`: Answer generation prompt
+   - **Researcher**: Enhanced researcher.py with prompt structure
+     - Added datetime imports and action descriptions
+     - Improved iterative research with better logging
+     - Simplified prompt that works with current architecture
 
-4. **Fixed type hints and return values**
-   - Search methods now return `Dict[str, Any]` instead of `List`
-   - Consistent error handling across modules
+   - **Writer**: Integrated `get_writer_prompt()` into search_agent.py
+     - Uses official answer generation prompt
+     - Supports mode-specific instructions (speed/balanced/quality)
+     - Proper citation requirements and formatting
 
-5. **Created test suite** (`test_setup.py`)
+3. **All imports working** ✓
+   - Tested: perplexica, Classifier, Researcher, SearchAgent, Config
+   - All prompts import successfully
+   - No more aiohttp/aiodns compatibility errors
+
+4. **Test suite passing** ✓
    - File structure validation
    - Python syntax checking
    - Configuration loading tests
-   - All tests passing ✓
+   - All modules can be imported
 
 ### What Was Already Implemented (Previous Iterations)
 
@@ -48,7 +54,7 @@ Refactor the entire Perplexica project into Python scripts, removing code and do
 
 3. **Search Architecture**
    - `search_agent.py`: Main orchestration with error handling
-   - `classifier.py`: Query classification logic
+   - `classifier.py`: Query classification with official prompt
    - `researcher.py`: Multi-step research implementation
    - `search.py`: SearXNG integration with proper error handling
 
@@ -64,6 +70,11 @@ Refactor the entire Perplexica project into Python scripts, removing code and do
    - Chat history formatting
    - Text manipulation utilities
 
+6. **Prompts** (`perplexica/prompts/`)
+   - `classifier.py`: Official classification prompt
+   - `researcher.py`: Mode-specific research prompts (speed/balanced/quality)
+   - `writer.py`: Answer generation with citation requirements
+
 ### What Was Removed (Intentionally Not Implemented)
 
 - **Frontend**: All React/Next.js UI components
@@ -78,41 +89,38 @@ Refactor the entire Perplexica project into Python scripts, removing code and do
 
 ### High Priority - Core Functionality
 
-1. **Fix dependency issues**
-   - aiohttp has dependency conflicts with aiodns/pycares
-   - Need to update requirements or provide workaround
-   - Consider using httpx as alternative to aiohttp
-
-2. **Test with real services**
+1. **Test with real services**
    - Verify SearXNG integration works with actual instance
-   - Test with Ollama provider
-   - Verify classification and research logic
-   - Test error handling paths
+   - Test with Ollama provider (or OpenAI/Anthropic)
+   - Verify classification produces sensible results
+   - Test research logic and iterative search
+   - Verify citation formatting in answers
+   - Test error handling paths (SearXNG down, LLM failures)
 
-3. **Update prompts integration**
-   - Currently prompts are defined but not used by classifier/researcher
-   - Need to integrate `perplexica/prompts/classifier.py` into classifier.py
-   - Need to integrate `perplexica/prompts/researcher.py` into researcher.py
-   - Need to integrate `perplexica/prompts/writer.py` into search_agent.py
+2. **End-to-end CLI testing**
+   - `python perplexica.py "test query"` should work
+   - Interactive mode should work (`python perplexica.py`)
+   - Different modes (speed/balanced/quality) should produce different results
+   - Different sources (web/academic/social) should work
 
 ### Medium Priority - Enhancements
 
-4. **Add database persistence**
+3. **Add database persistence**
    - Store chat history in SQLite
    - Persist search results for caching
    - Export chat history
 
-5. **Implement streaming responses**
+4. **Implement streaming responses**
    - Stream answers as they're generated
    - Show research progress in real-time
    - Better UX for long queries
 
-6. **Add file upload support**
+5. **Add file upload support**
    - Process PDFs and documents
    - Semantic search over uploads
    - Combine with web search
 
-7. **Add more providers**
+6. **Add more providers**
    - Google Gemini
    - Cohere
    - Hugging Face
@@ -120,17 +128,17 @@ Refactor the entire Perplexica project into Python scripts, removing code and do
 
 ### Low Priority - Nice to Have
 
-8. **Add web interface**
+7. **Add web interface**
    - FastAPI or Flask backend
    - Simple web UI
    - WebSocket support for streaming
 
-9. **Add tests**
+8. **Add tests**
    - Unit tests for core logic
    - Integration tests with mocks
    - Test coverage reporting
 
-10. **Improve documentation**
+9. **Improve documentation**
     - API documentation
     - Contributor guide
     - Architecture diagrams
@@ -144,7 +152,7 @@ aiohttp>=3.10.0
 python-dotenv>=1.0.0
 ```
 
-**Known Issue**: There's a compatibility issue with `aiohttp` and `aiodns`/`pycares` that causes import errors. The code structure is correct but dependencies need to be resolved for runtime testing.
+**Important**: Do NOT install aiodns or pycares. They have compatibility issues that cause `AttributeError` during import. aiohttp works fine without them.
 
 ### Model Providers
 
@@ -171,22 +179,42 @@ The search client (`perplexica/search.py`) provides:
 
 Results are standardized to a common format.
 
+### Prompt Integration
+
+All three major components now use official prompts from the TypeScript codebase:
+
+1. **Classifier** (`perplexica/prompts/classifier.py`)
+   - Determines if search is needed
+   - Generates standalone query from context
+   - Selects appropriate sources (web/academic/social)
+
+2. **Researcher** (`perplexica/prompts/researcher.py`)
+   - Mode-specific research strategies (speed/balanced/quality)
+   - Iterative deepening for quality mode
+   - Action descriptions for tool calling
+
+3. **Writer** (`perplexica/prompts/writer.py`)
+   - Professional blog-style answers
+   - Inline citation requirements [index]
+   - Mode-specific depth (quality mode requires 2000+ words)
+
 ## Known Issues/Limitations
 
-1. **Dependency conflicts**: aiohttp/aiodns import errors prevent full testing
+1. **No runtime testing yet**: Code structure verified but not tested with real services
 2. **No persistence**: All data is lost on exit
-3. **Prompts not integrated**: Prompt files exist but aren't used by actual code
-4. **No runtime testing**: Code structure verified but not tested with real services
+3. **No streaming**: Responses are generated all at once
 
 ## Next Steps Recommendation
 
 **Immediate next iteration should:**
 
-1. Fix the dependency issue (either resolve aiodns conflict or switch to httpx)
-2. Integrate the prompt files into actual classifier/researcher/writer code
-3. Test with a real SearXNG instance
-4. Test with a real LLM (Ollama or OpenAI)
-5. Verify end-to-end search flow works
+1. Set up a real SearXNG instance (or use a public one)
+2. Set up a real LLM (Ollama is easiest for local testing)
+3. Run `python perplexica.py "What is the latest news about AI?"` and verify it works
+4. Test different modes: `--mode speed`, `--mode balanced`, `--mode quality`
+5. Test different sources: `--sources academic`, `--sources social`
+6. Verify citations are included in answers
+7. Test error handling (e.g., stop SearXNG and verify graceful error)
 
 **Don't worry about yet:**
 - Database persistence
@@ -195,28 +223,28 @@ Results are standardized to a common format.
 - More providers
 - Widgets and extras
 
-Focus on getting the basic CLI search working reliably first.
+Focus on getting the basic CLI search working reliably with real services first.
 
 ## Files Created/Modified
 
 ```
-perplexica.py                 # Main CLI entry point (FIXED: async/sync)
-test_setup.py               # Basic test suite (NEW)
-requirements.txt            # Updated dependencies
+perplexica.py                 # Main CLI entry point
+test_setup.py               # Basic test suite
+requirements.txt            # Dependencies (FIXED: removed aiodns)
 
 perplexica/
 ├── __init__.py
 ├── config.py                # Configuration management
-├── search_agent.py          # Main orchestration (UPDATED: error handling)
-├── classifier.py            # Query classification
-├── researcher.py            # Research logic
-├── search.py                # SearXNG client (UPDATED: error handling)
+├── search_agent.py          # Main orchestration (UPDATED: writer prompt)
+├── classifier.py            # Query classification (UPDATED: official prompt)
+├── researcher.py            # Research logic (UPDATED: prompt structure)
+├── search.py                # SearXNG client
 ├── utils.py                 # Utilities
-├── prompts/                 # NEW: Prompt templates
+├── prompts/                 # Prompt templates
 │   ├── __init__.py
-│   ├── classifier.py
-│   ├── researcher.py
-│   └── writer.py
+│   ├── classifier.py        # Classification prompt (INTEGRATED)
+│   ├── researcher.py        # Research prompts (INTEGRATED)
+│   └── writer.py            # Writer prompt (INTEGRATED)
 └── models/
     ├── __init__.py
     ├── base.py              # Abstract base classes
@@ -231,7 +259,8 @@ perplexica/
 ✓ File structure - All required files exist
 ✓ Python syntax - All files compile successfully
 ✓ Configuration - Config structure is valid
-✗ Runtime imports - Blocked by dependency issues
+✓ Runtime imports - All modules import without errors
+✗ Runtime testing - Not tested with real services yet
 
 ## Testing Checklist
 
@@ -239,13 +268,14 @@ Before considering the core "done", verify:
 
 - [x] All files have valid syntax
 - [x] Configuration loads correctly
-- [ ] Import all modules without errors (blocked by aiohttp)
+- [x] Import all modules without errors
 - [ ] `python perplexica.py "test query"` works
 - [ ] Interactive mode works (`python perplexica.py`)
 - [ ] SearXNG integration returns results
-- [ ] Ollama provider generates responses
+- [ ] LLM provider generates responses
 - [ ] Classification produces sensible results
 - [ ] Citations/sources are included in answers
 - [ ] Error handling works (e.g., SearXNG down)
 - [ ] Different modes (speed/balanced/quality) work
+- [ ] Different sources (web/academic/social) work
 
